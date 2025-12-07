@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>IEI Password Request</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    /* Basic reset */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #1d3557, #457b9d);
+    }
+
+    .card {
+      background: #ffffff;
+      width: 100%;
+      max-width: 420px;
+      padding: 2rem 2.5rem;
+      border-radius: 18px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+    }
+
+    .card h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.25rem;
+      text-align: center;
+      color: #1d3557;
+    }
+
+    .card p.subtitle {
+      font-size: 0.9rem;
+      text-align: center;
+      color: #6c757d;
+      margin-bottom: 1.5rem;
+    }
+
+    .field {
+      margin-bottom: 1rem;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #34495e;
+      margin-bottom: 0.35rem;
+    }
+
+    .inline-row {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    select,
+    input {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.95rem;
+      border-radius: 8px;
+      border: 1px solid #ced4da;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus,
+    input:focus {
+      border-color: #457b9d;
+      box-shadow: 0 0 0 3px rgba(69, 123, 157, 0.2);
+    }
+
+    .hint {
+      font-size: 0.78rem;
+      color: #868e96;
+      margin-top: 0.15rem;
+    }
+
+    .membership-preview {
+      font-size: 0.9rem;
+      color: #495057;
+      margin-top: 0.3rem;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.7rem 0.75rem;
+      font-size: 0.98rem;
+      font-weight: 600;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      background: #1d3557;
+      color: #ffffff;
+      margin-top: 0.75rem;
+      transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      background: #16304c;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+      box-shadow: none;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .message {
+      margin-top: 0.9rem;
+      font-size: 0.9rem;
+      padding: 0.6rem 0.75rem;
+      border-radius: 10px;
+      display: none;
+    }
+
+    .message.success {
+      display: block;
+      background: #d1f7d6;
+      color: #0f5132;
+      border: 1px solid #a3e6b1;
+    }
+
+    .message.error {
+      display: block;
+      background: #ffe1e1;
+      color: #842029;
+      border: 1px solid #f5b3b3;
+    }
+
+    .message.info {
+      display: block;
+      background: #e3f2fd;
+      color: #0c4a6e;
+      border: 1px solid #90caf9;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>IEI Password Request</h1>
+    <p class="subtitle">Enter your Membership ID to receive your login password by SMS.</p>
+
+    <form id="passwordForm">
+      <!-- Membership ID selection -->
+      <div class="field">
+        <label for="prefix">Membership Type</label>
+        <select id="prefix" required>
+          <option value="F-">F</option>
+          <option value="M-">M</option>
+          <option value="AM">AM</option>
+          <option value="ST">ST</option>
+          <option value="T-">T</option>
+        </select>
+        <p class="hint">Select the prefix printed on your IEI membership card.</p>
+      </div>
+
+      <div class="field">
+        <label for="number">Membership Number</label>
+        <div class="inline-row">
+          <input
+            type="text"
+            id="number"
+            maxlength="7"
+            placeholder="Enter 7-digit number"
+            inputmode="numeric"
+          />
+        </div>
+        <p class="hint">Only digits, e.g. 1423556</p>
+        <p id="preview" class="membership-preview"></p>
+      </div>
+
+      <button type="submit" id="sendBtn">Send Password to My Phone</button>
+
+      <div id="msg" class="message info">
+        Please enter your Membership ID and click “Send Password”.
+      </div>
+    </form>
+  </div>
+
+  <script>
+  const prefixSelect = document.getElementById("prefix");
+  const numberInput = document.getElementById("number");
+  const preview = document.getElementById("preview");
+  const form = document.getElementById("passwordForm");
+  const msgBox = document.getElementById("msg");
+  const sendBtn = document.getElementById("sendBtn");
+
+  // Update live preview of full membership ID
+  function updatePreview() {
+    const prefix = prefixSelect.value;
+    const num = numberInput.value.trim();
+    if (num.length > 0) {
+      preview.textContent = "Full Membership ID: " + prefix + num;
+    } else {
+      preview.textContent = "";
+    }
+  }
+
+  prefixSelect.addEventListener("change", updatePreview);
+  numberInput.addEventListener("input", (e) => {
+    // allow only digits
+    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 7);
+    updatePreview();
+  });
+
+  function showMessage(type, text) {
+    msgBox.className = "message " + type;
+    msgBox.textContent = text;
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const prefix = prefixSelect.value;
+    const num = numberInput.value.trim();
+
+    if (!/^\d{7}$/.test(num)) {
+      showMessage("error", "Please enter a valid 7-digit membership number.");
+      return;
+    }
+
+    const membershipId = prefix + num;
+
+    // Disable button while processing
+    sendBtn.disabled = true;
+    showMessage("info", "Sending password for " + membershipId + "…");
+
+    try {
+      // 🔹 Here you will call your backend / IEI API in future.
+      // For now we just simulate a delay.
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
+      // TEMP: we don't know the real phone here yet,
+      // so we pretend the last 4 digits of the *phone*
+      // are the last 4 digits of the membership number.
+      const last4 = num.slice(-4);
+
+      showMessage(
+        "success",
+        "A password SMS has been sent " +
+          "to the phone number ending with " +
+          last4 +
+          "."
+      );
+    } catch (err) {
+      console.error(err);
+      showMessage(
+        "error",
+        "Something went wrong while sending the password. Please try again later."
+      );
+    } finally {
+      sendBtn.disabled = false;
+    }
+  });
+
+  // Initial text
+  showMessage(
+    "info",
+    "Please enter your Membership ID and click “Send Password”."
+  );
+</script>
+
+</body>
+</html>
