@@ -203,7 +203,7 @@
   const msgBox = document.getElementById("msg");
   const sendBtn = document.getElementById("sendBtn");
 
-  // Update live preview of full membership ID
+  // Show live preview of full membership ID
   function updatePreview() {
     const prefix = prefixSelect.value;
     const num = numberInput.value.trim();
@@ -216,7 +216,7 @@
 
   prefixSelect.addEventListener("change", updatePreview);
   numberInput.addEventListener("input", (e) => {
-    // allow only digits
+    // allow only digits and max 7 characters
     e.target.value = e.target.value.replace(/\D/g, "").slice(0, 7);
     updatePreview();
   });
@@ -232,6 +232,7 @@
     const prefix = prefixSelect.value;
     const num = numberInput.value.trim();
 
+    // basic validation: exactly 7 digits
     if (!/^\d{7}$/.test(num)) {
       showMessage("error", "Please enter a valid 7-digit membership number.");
       return;
@@ -239,24 +240,30 @@
 
     const membershipId = prefix + num;
 
-    // Disable button while processing
     sendBtn.disabled = true;
     showMessage("info", "Sending password for " + membershipId + "…");
 
     try {
-      // 🔹 Here you will call your backend / IEI API in future.
-      // For now we just simulate a delay.
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      // 🔹 Call your Node backend
+      const response = await fetch("http://localhost:3000/send-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ membership_id: membershipId }),
+      });
 
-      // TEMP: we don't know the real phone here yet,
-      // so we pretend the last 4 digits of the *phone*
-      // are the last 4 digits of the membership number.
-      const last4 = num.slice(-4);
+      const data = await response.json();
+
+      if (!response.ok) {
+        showMessage("error", data.message || "Error from server.");
+        return;
+      }
+
+      const last4 = data.last4; // this comes from the REAL phone number in Excel
 
       showMessage(
         "success",
-        "A password SMS has been sent " +
-          "to the phone number ending with " +
+        "A password SMS has been triggered for your account. " +
+          "It has been sent to the phone number ending with " +
           last4 +
           "."
       );
@@ -264,19 +271,20 @@
       console.error(err);
       showMessage(
         "error",
-        "Something went wrong while sending the password. Please try again later."
+        "Something went wrong while contacting the server. Please try again."
       );
     } finally {
       sendBtn.disabled = false;
     }
   });
 
-  // Initial text
+  // initial info message
   showMessage(
     "info",
     "Please enter your Membership ID and click “Send Password”."
   );
 </script>
+
 
 </body>
 </html>
