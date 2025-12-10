@@ -1,3 +1,4 @@
+// server.js
 const express = require("express");
 const cors = require("cors");
 const XLSX = require("xlsx");
@@ -7,7 +8,8 @@ const app = express();
 const PORT = 3000;
 
 // -------------------- Config --------------------
-const SIMULATION_MODE = true; // set to false later when you plug a real SMS provider
+const SIMULATION_MODE = true; // set to false when you plug a real SMS provider
+const AUTO_RUN_BULK = false; // set to true to auto-start bulk job on server start (for demo)
 
 // Middleware
 app.use(cors());
@@ -45,15 +47,22 @@ members = members.map((m) => {
     phoneno: m.phoneno ? String(m.phoneno) : null,
   };
 
-  // If there is no password in the spreadsheet, create one in memory (optional)
+  // If there is no password in the spreadsheet, leave undefined - will generate on first send
   if (!normalized.password) {
-    normalized.password = undefined; // will be generated on first send
+    normalized.password = undefined;
   }
 
   return normalized;
 });
 
 console.log(`Loaded ${members.length} members from Excel`);
+
+// DEBUG: print first 20 members to verify data (index -> membership_id -> phone)
+members.slice(0, 20).forEach((m, idx) =>
+  console.log(
+    `[DATA] ${idx}: ${m.membership_id} -> ${m.phoneno_clean || m.phoneno || "NO_PHONE"}`
+  )
+);
 
 // ---------- In-memory sent logs ----------
 const sentLogs = []; // newest first
@@ -67,11 +76,17 @@ async function sendSms(phone, messageText) {
   }
 
   // REAL mode (placeholder). Replace with real provider integration.
+  // Example (pseudocode):
+  // const apiKey = process.env.SMS_API_KEY;
+  // if (!apiKey) throw new Error("SMS_API_KEY not configured");
+  // const response = await fetch(providerUrl, { method: "POST", headers: {...}, body: JSON.stringify({...}) });
+  // const data = await response.json();
+  // return data;
+
   const apiKey = process.env.SMS_API_KEY;
   if (!apiKey) {
     throw new Error("SMS_API_KEY not configured");
   }
-  // Example with fetch/axios to your provider would go here.
   throw new Error("Real SMS mode is not implemented yet.");
 }
 
@@ -88,6 +103,19 @@ async function sendToMemberAndLog(member) {
       : member.phoneno;
   if (!phone) {
     console.log(`[SKIP] No phone for ${member.membership_id}`);
+    // record skip in logs optionally
+    const nowSkip = new Date().toISOString();
+    sentLogs.unshift({
+      membership_id: member.membership_id,
+      name: member.name || "",
+      email: member.email || "",
+      phone: null,
+      last4: null,
+      status: "skipped",
+      timestamp: nowSkip,
+      providerResult: { reason: "no-phone" },
+    });
+    if (sentLogs.length > 5000) sentLogs.length = 5000;
     return { status: "skipped", reason: "no-phone", membership_id: member.membership_id };
   }
 
@@ -125,8 +153,45 @@ async function sendToMemberAndLog(member) {
       timestamp: now,
       providerResult: { error: String(err) },
     });
+    if (sentLogs.length > 5000) sentLogs.length = 5000;
     return { status: "failed", membership_id: member.membership_id, error: String(err) };
   }
+}
+
+// ---------- Reusable bulk runner ----------
+/**
+ * options: { batchSize, delayMs, start, limit }
+ * - batchSize: number of members per batch
+ * - delayMs: milliseconds to wait between batches
+ * - start: start index in members array
+ * - limit: how many members to process (undefined => until end)
+ */
+async function runBulkOptions({ batchSize = 5, delayMs = 3000, start = 0, limit = undefined } = {}) {
+  const totalMembers = members.length;
+  const from = Math.max(0, Math.min(start, totalMembers - 1));
+  const maxLimit = limit !== undefined ? Math.max(0, Math.min(limit, totalMembers - from)) : totalMembers - from;
+  const endIndexExclusive = from + maxLimit;
+
+  console.log(
+    `[BULK] runBulkOptions start=${from} end=${endIndexExclusive - 1} batchSize=${batchSize} delayMs=${delayMs}`
+  );
+
+  for (let i = from; i < endIndexExclusive; i += batchSize) {
+    const batch = members.slice(i, Math.min(i + batchSize, endIndexExclusive));
+    console.log(`[BULK] Processing batch for indices ${i}..${i + batch.length - 1}`);
+
+    // sequential sending inside batch (safer for rate limits). For parallel use Promise.all.
+    for (const m of batch) {
+      await sendToMemberAndLog(m);
+    }
+
+    if (i + batchSize < endIndexExclusive) {
+      console.log(`[BULK] Waiting ${delayMs} ms before next batch...`);
+      await sleep(delayMs);
+    }
+  }
+
+  console.log("[BULK] runBulkOptions completed.");
 }
 
 // ---------- API endpoint: send-password (single) ----------
@@ -138,23 +203,17 @@ app.post("/send-password", async (req, res) => {
       return res.status(400).json({ message: "membership_id is required" });
     }
 
-    const member = members.find(
-      (m) => m.membership_id === String(membership_id).trim()
-    );
+    const member = members.find((m) => m.membership_id === String(membership_id).trim());
 
     if (!member) {
       return res.status(404).json({ message: "Membership ID not found" });
     }
 
     const phone =
-      member.phoneno_clean && member.phoneno_clean !== "null"
-        ? member.phoneno_clean
-        : member.phoneno;
+      member.phoneno_clean && member.phoneno_clean !== "null" ? member.phoneno_clean : member.phoneno;
 
     if (!phone) {
-      return res
-        .status(500)
-        .json({ message: "Phone number not available for this member" });
+      return res.status(500).json({ message: "Phone number not available for this member" });
     }
 
     const phoneStr = String(phone);
@@ -188,16 +247,12 @@ app.post("/send-password", async (req, res) => {
 
     return res.json({
       status: SIMULATION_MODE ? "simulated" : "sent",
-      message: SIMULATION_MODE
-        ? "SMS sending simulated (no real SMS sent in demo)."
-        : "Password SMS sent successfully.",
+      message: SIMULATION_MODE ? "SMS sending simulated (no real SMS sent in demo)." : "Password SMS sent successfully.",
       last4: last4,
     });
   } catch (err) {
     console.error("Error in /send-password:", err);
-    return res
-      .status(500)
-      .json({ message: "Failed to process request. Please try again." });
+    return res.status(500).json({ message: "Failed to process request. Please try again." });
   }
 });
 
@@ -216,39 +271,12 @@ app.post("/bulk-send", async (req, res) => {
     const batchSize = parseInt(req.body.batchSize) || 5;
     const delayMs = parseInt(req.body.delayMs) || 3000;
     const start = parseInt(req.body.start) || 0;
-    let limit = req.body.limit !== undefined ? parseInt(req.body.limit) : members.length;
+    const limit = req.body.limit !== undefined ? parseInt(req.body.limit) : undefined;
 
-    // sanitize
-    const totalMembers = members.length;
-    const from = Math.max(0, Math.min(start, totalMembers - 1));
-    limit = Math.max(0, Math.min(limit, totalMembers - from));
+    // run bulk (keeps the request open until finished)
+    await runBulkOptions({ batchSize, delayMs, start, limit });
 
-    if (limit === 0) {
-      return res.status(400).json({ message: "No members to process (limit is 0 or out of range)" });
-    }
-
-    const endIndexExclusive = from + limit;
-    console.log(`[BULK] Starting bulk send: members ${from} .. ${endIndexExclusive - 1}, batchSize=${batchSize}, delayMs=${delayMs}`);
-
-    // We'll process sequentially in batches. This will keep the HTTP request open until finished.
-    for (let i = from; i < endIndexExclusive; i += batchSize) {
-      const batch = members.slice(i, Math.min(i + batchSize, endIndexExclusive));
-      console.log(`[BULK] Processing batch for indices ${i}..${i + batch.length - 1}`);
-
-      // send to each member in this batch sequentially (you can also do Promise.all for parallel within batch)
-      for (const m of batch) {
-        await sendToMemberAndLog(m);
-      }
-
-      // wait between batches unless we are at the end
-      if (i + batchSize < endIndexExclusive) {
-        console.log(`[BULK] Waiting ${delayMs} ms before next batch...`);
-        await sleep(delayMs);
-      }
-    }
-
-    console.log("[BULK] Bulk send completed.");
-    return res.json({ message: "Bulk send completed", processedFrom: from, processedTo: endIndexExclusive - 1 });
+    return res.json({ message: "Bulk send completed", processedFrom: start, processedTo: limit !== undefined ? start + limit - 1 : members.length - 1 });
   } catch (err) {
     console.error("[BULK] Error in bulk-send:", err);
     return res.status(500).json({ message: "Bulk send failed", error: String(err) });
@@ -265,4 +293,15 @@ app.get("/sent-logs", (req, res) => {
 // ---------- Start server ----------
 app.listen(PORT, () => {
   console.log(`Node backend running on http://localhost:${PORT}`);
+
+  // Auto-run bulk (for demo) if enabled
+  if (AUTO_RUN_BULK) {
+    // small delay to ensure server fully initialized
+    setTimeout(() => {
+      // example defaults: 5 per batch, 3000ms delay, start 0, limit 20
+      runBulkOptions({ batchSize: 5, delayMs: 3000, start: 0, limit: Math.min(20, members.length) }).catch((err) =>
+        console.error("Auto bulk run failed:", err)
+      );
+    }, 1000);
+  }
 });

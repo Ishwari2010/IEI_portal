@@ -58,11 +58,6 @@
       margin-bottom: 0.35rem;
     }
 
-    .inline-row {
-      display: flex;
-      gap: 0.75rem;
-    }
-
     select,
     input {
       width: 100%;
@@ -78,18 +73,6 @@
     input:focus {
       border-color: #457b9d;
       box-shadow: 0 0 0 3px rgba(69, 123, 157, 0.2);
-    }
-
-    .hint {
-      font-size: 0.78rem;
-      color: #868e96;
-      margin-top: 0.15rem;
-    }
-
-    .membership-preview {
-      font-size: 0.9rem;
-      color: #495057;
-      margin-top: 0.3rem;
     }
 
     button {
@@ -114,14 +97,11 @@
 
     button:active {
       transform: translateY(0);
-      box-shadow: none;
     }
 
     button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
-      box-shadow: none;
-      transform: none;
     }
 
     .message {
@@ -153,7 +133,6 @@
       border: 1px solid #90caf9;
     }
 
-    /* Log Table */
     #log-container {
       width: 100%;
       max-width: 900px;
@@ -187,13 +166,11 @@
       background: #f8f9fa;
       font-weight: 700;
     }
-
   </style>
 </head>
 
 <body>
 
-  <!-- Main Form Card -->
   <div class="card">
     <h1>IEI Password Request</h1>
     <p class="subtitle">Enter your Membership ID to receive your login password by SMS.</p>
@@ -208,13 +185,11 @@
           <option value="ST">ST</option>
           <option value="T-">T</option>
         </select>
-        <p class="hint">Select the prefix printed on your IEI membership card.</p>
       </div>
 
       <div class="field">
         <label for="number">Membership Number</label>
         <input type="text" id="number" maxlength="7" placeholder="Enter 7-digit number" inputmode="numeric" />
-        <p class="hint">Example: 1423556</p>
         <p id="preview" class="membership-preview"></p>
       </div>
 
@@ -226,7 +201,36 @@
     </form>
   </div>
 
-  <!-- Logs Table -->
+  <!-- ADMIN BULK SEND PANEL -->
+  <div class="card" style="max-width:900px; margin-bottom:1rem;">
+    <h2 style="text-align:center; color:#1d3557;">Admin — Bulk Send</h2>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+      <label style="flex:1 1 120px;">Batch size
+        <input id="adminBatchSize" type="number" value="5" min="1" style="width:100%; margin-top:6px;" />
+      </label>
+
+      <label style="flex:1 1 150px;">Delay (ms)
+        <input id="adminDelayMs" type="number" value="3000" min="0" style="width:100%; margin-top:6px;" />
+      </label>
+
+      <label style="flex:1 1 120px;">Start index
+        <input id="adminStart" type="number" value="0" min="0" style="width:100%; margin-top:6px;" />
+      </label>
+
+      <label style="flex:1 1 120px;">Limit
+        <input id="adminLimit" type="number" placeholder="all" style="width:100%; margin-top:6px;" />
+      </label>
+    </div>
+
+    <div style="margin-top:12px; display:flex; gap:10px;">
+      <button id="startBulkBtn" style="flex:0 0 220px;">Start Bulk Send (5 at a time)</button>
+      <button id="cancelBulkBtn" disabled style="flex:0 0 120px; background:#6c757d;">Cancel</button>
+      <div id="bulkStatus" style="margin-left:8px; align-self:center; color:#1d3557;">Idle</div>
+    </div>
+  </div>
+
+  <!-- LOG TABLE -->
   <div id="log-container">
     <h2>Sent Messages Log</h2>
     <div id="logArea"><p style="text-align:center; color:#6c757d;">No messages sent yet.</p></div>
@@ -244,34 +248,18 @@
     function updatePreview() {
       const prefix = prefixSelect.value;
       const num = numberInput.value.trim();
-      preview.textContent = num.length > 0 ? "Full Membership ID: " + prefix + num : "";
+      preview.textContent = num ? "Full Membership ID: " + prefix + num : "";
     }
 
     numberInput.addEventListener("input", (e) => {
       e.target.value = e.target.value.replace(/\D/g, "").slice(0, 7);
       updatePreview();
     });
-    prefixSelect.addEventListener("change", updatePreview);
-
-    function showMessage(type, text) {
-      msgBox.className = "message " + type;
-      msgBox.textContent = text;
-    }
-
-    function maskPhone(phone) {
-      const s = String(phone);
-      if (s.length <= 4) return s;
-      return "******" + s.slice(-4);
-    }
 
     async function fetchLogs() {
-      try {
-        const resp = await fetch("http://localhost:3000/sent-logs?limit=200");
-        const logs = await resp.json();
-        renderLogs(logs);
-      } catch (err) {
-        logArea.innerHTML = "<p style='text-align:center;color:#842029;'>Unable to load logs.</p>";
-      }
+      const resp = await fetch("http://localhost:3000/sent-logs?limit=200");
+      const logs = await resp.json();
+      renderLogs(logs);
     }
 
     function renderLogs(logs) {
@@ -281,28 +269,20 @@
       }
 
       let html = `<table>
-        <thead>
-          <tr>
-            <th>Membership ID</th>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Phone</th>
-            <th>Time</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>`;
+      <thead><tr>
+        <th>Membership ID</th><th>Name</th><th>Email</th>
+        <th>Phone</th><th>Time</th><th>Status</th>
+      </tr></thead><tbody>`;
 
       logs.forEach((row) => {
-        html += `
-          <tr>
-            <td>${row.membership_id}</td>
-            <td>${row.name || ""}</td>
-            <td>${row.email || ""}</td>
-            <td>${maskPhone(row.phone)}</td>
-            <td>${new Date(row.timestamp).toLocaleString()}</td>
-            <td>${row.status}</td>
-          </tr>`;
+        html += `<tr>
+          <td>${row.membership_id}</td>
+          <td>${row.name}</td>
+          <td>${row.email}</td>
+          <td>******${row.last4}</td>
+          <td>${new Date(row.timestamp).toLocaleString()}</td>
+          <td>${row.status}</td>
+        </tr>`;
       });
 
       html += "</tbody></table>";
@@ -311,43 +291,68 @@
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-
       const prefix = prefixSelect.value;
       const number = numberInput.value.trim();
+      if (!/^\d{7}$/.test(number)) return;
 
-      if (!/^\d{7}$/.test(number)) {
-        showMessage("error", "Please enter a valid 7-digit membership number.");
-        return;
-      }
-
-      const membershipId = prefix + number;
       sendBtn.disabled = true;
-      showMessage("info", "Sending password for " + membershipId + "…");
+      const membershipId = prefix + number;
+
+      const response = await fetch("http://localhost:3000/send-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ membership_id: membershipId }),
+      });
+
+      await fetchLogs();
+      sendBtn.disabled = false;
+    });
+
+    // ADMIN BULK SEND
+    const startBulkBtn = document.getElementById("startBulkBtn");
+    const cancelBulkBtn = document.getElementById("cancelBulkBtn");
+    const bulkStatus = document.getElementById("bulkStatus");
+    let bulkAbortController = null;
+
+    startBulkBtn.addEventListener("click", async () => {
+      const payload = {
+        batchSize: parseInt(document.getElementById("adminBatchSize").value),
+        delayMs: parseInt(document.getElementById("adminDelayMs").value),
+        start: parseInt(document.getElementById("adminStart").value),
+        limit: document.getElementById("adminLimit").value || undefined
+      };
+
+      startBulkBtn.disabled = true;
+      cancelBulkBtn.disabled = false;
+      bulkStatus.textContent = "Running...";
+
+      bulkAbortController = new AbortController();
 
       try {
-        const response = await fetch("http://localhost:3000/send-password", {
+        await fetch("http://localhost:3000/bulk-send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ membership_id: membershipId }),
+          body: JSON.stringify(payload),
+          signal: bulkAbortController.signal,
         });
 
-        const data = await response.json();
-
-        if (!response.ok) {
-          showMessage("error", data.message || "Server error.");
-          return;
-        }
-
-        showMessage("success",
-          "Password SMS sent (or simulated). Phone ending: " + data.last4
-        );
-
-        await fetchLogs();
+        bulkStatus.textContent = "Completed";
       } catch (err) {
-        showMessage("error", "Could not reach the server.");
+        bulkStatus.textContent = err.name === "AbortError" ? "Cancelled" : "Failed";
       }
 
-      sendBtn.disabled = false;
+      cancelBulkBtn.disabled = true;
+      startBulkBtn.disabled = false;
+      bulkAbortController = null;
+      fetchLogs();
+    });
+
+    cancelBulkBtn.addEventListener("click", () => {
+      if (bulkAbortController) {
+        bulkAbortController.abort();
+        cancelBulkBtn.disabled = true;
+        bulkStatus.textContent = "Cancelling...";
+      }
     });
 
     fetchLogs();
