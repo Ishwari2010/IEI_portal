@@ -3,7 +3,8 @@ import requests
 import time  # To avoid sending too fast
 
 # Read your CSV file
-df = pd.read_csv('students.csv')
+df = pd.read_excel('iei_processed_members.xlsx')
+
 
 # Your TextBee credentials (replace these!)
 API_KEY = "a71a0149-a893-440a-9f29-c5d0731db4ce"      # From TextBee dashboard
