@@ -1,363 +1,215 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>IEI Password Request</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<title>IEI SMS Management System</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-
-    body {
-      min-height: 100vh;
-      padding: 2rem 1rem;
-      background: linear-gradient(135deg, #1d3557, #457b9d);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .card {
-      background: #ffffff;
-      width: 100%;
-      max-width: 420px;
-      padding: 2rem 2.5rem;
-      border-radius: 18px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
-      margin-bottom: 2rem;
-    }
-
-    .card h1 {
-      font-size: 1.4rem;
-      margin-bottom: 0.25rem;
-      text-align: center;
-      color: #1d3557;
-    }
-
-    .card p.subtitle {
-      font-size: 0.9rem;
-      text-align: center;
-      color: #6c757d;
-      margin-bottom: 1.5rem;
-    }
-
-    .field {
-      margin-bottom: 1rem;
-    }
-
-    .field label {
-      display: block;
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: #34495e;
-      margin-bottom: 0.35rem;
-    }
-
-    select,
-    input {
-      width: 100%;
-      padding: 0.6rem 0.75rem;
-      font-size: 0.95rem;
-      border-radius: 8px;
-      border: 1px solid #ced4da;
-      outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
-
-    select:focus,
-    input:focus {
-      border-color: #457b9d;
-      box-shadow: 0 0 0 3px rgba(69, 123, 157, 0.2);
-    }
-
-    button {
-      width: 100%;
-      padding: 0.7rem 0.75rem;
-      font-size: 0.98rem;
-      font-weight: 600;
-      border-radius: 999px;
-      border: none;
-      cursor: pointer;
-      background: #1d3557;
-      color: #ffffff;
-      margin-top: 0.75rem;
-      transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
-    }
-
-    button:hover {
-      background: #16304c;
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
-      transform: translateY(-1px);
-    }
-
-    button:active {
-      transform: translateY(0);
-    }
-
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .message {
-      margin-top: 0.9rem;
-      font-size: 0.9rem;
-      padding: 0.6rem 0.75rem;
-      border-radius: 10px;
-      display: none;
-    }
-
-    .message.success {
-      display: block;
-      background: #d1f7d6;
-      color: #0f5132;
-      border: 1px solid #a3e6b1;
-    }
-
-    .message.error {
-      display: block;
-      background: #ffe1e1;
-      color: #842029;
-      border: 1px solid #f5b3b3;
-    }
-
-    .message.info {
-      display: block;
-      background: #e3f2fd;
-      color: #0c4a6e;
-      border: 1px solid #90caf9;
-    }
-
-    #log-container {
-      width: 100%;
-      max-width: 900px;
-      background: white;
-      padding: 1.5rem;
-      border-radius: 14px;
-      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.18);
-    }
-
-    #log-container h2 {
-      text-align: center;
-      color: #1d3557;
-      margin-bottom: 1rem;
-      font-size: 1.2rem;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-    }
-
-    table th, table td {
-      padding: 10px;
-      border-bottom: 1px solid #e9ecef;
-      text-align: left;
-      font-size: 0.9rem;
-    }
-
-    table th {
-      background: #f8f9fa;
-      font-weight: 700;
-    }
-  </style>
+<style>
+:root {
+  --primary:#1f3c88;
+  --primary-dark:#162f6a;
+  --bg:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+}
+*{box-sizing:border-box;font-family:Inter,system-ui;}
+body{
+  margin:0;min-height:100vh;background:var(--bg);
+  padding:40px 16px;color:#1f2937;
+}
+.container{max-width:1200px;margin:auto;}
+.header{text-align:center;color:white;margin-bottom:30px;}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+@media(max-width:900px){.grid{grid-template-columns:1fr;}}
+.card{
+  background:white;border-radius:16px;padding:24px;
+  box-shadow:0 18px 35px rgba(0,0,0,.18);
+}
+h2{color:var(--primary);margin-bottom:6px;}
+p{color:#6b7280;font-size:.85rem;margin-bottom:18px;}
+label{
+  display:block;font-size:.7rem;font-weight:700;
+  margin-bottom:6px;letter-spacing:.04em;
+}
+input,select,textarea{
+  width:100%;padding:10px 12px;border-radius:10px;
+  border:1px solid #d1d5db;font-size:.9rem;
+}
+button{
+  width:100%;padding:12px;border-radius:999px;
+  border:none;background:var(--primary);
+  color:white;font-weight:600;cursor:pointer;
+}
+button:hover{background:var(--primary-dark);}
+.divider{height:1px;background:#e5e7eb;margin:20px 0;}
+.status{margin-top:8px;font-size:.85rem;color:#0369a1;}
+.logs{
+  margin-top:30px;background:white;border-radius:16px;
+  padding:22px;box-shadow:0 18px 35px rgba(0,0,0,.18);
+}
+table{width:100%;border-collapse:collapse;font-size:.85rem;}
+th,td{padding:10px;border-bottom:1px solid #e5e7eb;}
+th{background:#f9fafb;}
+.tag{padding:4px 10px;border-radius:999px;background:#e0f2fe;color:#0369a1;font-size:.7rem;}
+</style>
 </head>
 
 <body>
+<div class="container">
 
-  <div class="card">
-    <h1>IEI Password Request</h1>
-    <p class="subtitle">Enter your Membership ID to receive your login password by SMS.</p>
+<div class="header">
+  <h1>IEI SMS Management System</h1>
+  <p>Password dispatch & bulk messaging platform</p>
+</div>
 
-    <form id="passwordForm">
-      <div class="field">
-        <label for="prefix">Membership Type</label>
-        <select id="prefix" required>
-          <option value="F-">F</option>
-          <option value="M-">M</option>
-          <option value="AM">AM</option>
-          <option value="ST">ST</option>
-          <option value="T-">T</option>
-        </select>
-      </div>
+<div class="grid">
 
-      <div class="field">
-        <label for="number">Membership Number</label>
-        <input type="text" id="number" maxlength="7" placeholder="Enter 7-digit number" inputmode="numeric" />
-        <p id="preview" class="membership-preview"></p>
-      </div>
+<!-- USER -->
+<div class="card">
+  <h2>User – Request Password</h2>
+  <p>Receive IEI portal password via SMS</p>
 
-      <button type="submit" id="sendBtn">Send Password to My Phone</button>
+  <label>Membership Type</label>
+  <select id="prefix">
+    <option value="F-">F</option>
+    <option value="M-">M</option>
+    <option value="AM">AM</option>
+    <option value="ST">ST</option>
+    <option value="T-">T</option>
+  </select>
 
-      <div id="msg" class="message info">
-        Please enter your Membership ID and click “Send Password”.
-      </div>
-    </form>
-  </div>
+  <label>Membership Number</label>
+  <input id="number" maxlength="7" placeholder="7-digit number">
 
-  <!-- ADMIN BULK SEND PANEL -->
-  <div class="card" style="max-width:900px; margin-bottom:1rem;">
-    <h2 style="text-align:center; color:#1d3557;">Admin</h2>
+  <button onclick="sendSingle()">Send Password</button>
+</div>
 
-    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
-      <label style="flex:1 1 120px;">Batch size
-        <input id="adminBatchSize" type="number" value="5" min="1" style="width:100%; margin-top:6px;" />
-      </label>
+<!-- ADMIN -->
+<div class="card">
+  <h2>Admin – Upload Excel</h2>
+  <p>Upload members for bulk SMS</p>
 
-      <label style="flex:1 1 150px;">Delay (ms)
-        <input id="adminDelayMs" type="number" value="3000" min="0" style="width:100%; margin-top:6px;" />
-      </label>
+  <input type="file" id="excelFile" accept=".xls,.xlsx">
+  <button onclick="uploadExcel()">Upload Excel</button>
+  <div id="uploadStatus" class="status"></div>
 
-      <label style="flex:1 1 120px;">Start index
-        <input id="adminStart" type="number" value="0" min="0" style="width:100%; margin-top:6px;" />
-      </label>
+  <div class="divider"></div>
 
-      <label style="flex:1 1 120px;">Limit
-        <input id="adminLimit" type="number" placeholder="all" style="width:100%; margin-top:6px;" />
-      </label>
-    </div>
+  <h2 style="font-size:1rem">Bulk SMS Controls</h2>
 
-    <div style="margin-top:12px; display:flex; gap:10px;">
-      <button id="startBulkBtn" style="flex:0 0 220px;">Start</button>
-      <button id="cancelBulkBtn" disabled style="flex:0 0 120px; background:#6c757d;">Cancel</button>
-      <div id="bulkStatus" style="margin-left:8px; align-self:center; color:#1d3557;">Idle</div>
-    </div>
-  </div>
+  <label>Batch Size</label>
+  <input id="batchSize" type="number" value="5">
 
-  <!-- LOG TABLE -->
-  <div id="log-container">
-    <h2>Sent Messages Log</h2>
-    <div id="logArea"><p style="text-align:center; color:#6c757d;">No messages sent yet.</p></div>
-  </div>
+  <label>Delay (ms)</label>
+  <input id="delayMs" type="number" value="3000">
 
-  <script>
-    const prefixSelect = document.getElementById("prefix");
-    const numberInput = document.getElementById("number");
-    const preview = document.getElementById("preview");
-    const form = document.getElementById("passwordForm");
-    const msgBox = document.getElementById("msg");
-    const sendBtn = document.getElementById("sendBtn");
-    const logArea = document.getElementById("logArea");
+  <label>Start Index</label>
+  <input id="startIndex" type="number" value="0">
 
-    function updatePreview() {
-      const prefix = prefixSelect.value;
-      const num = numberInput.value.trim();
-      preview.textContent = num ? "Full Membership ID: " + prefix + num : "";
-    }
+  <label>Limit (optional)</label>
+  <input id="limit" type="number" placeholder="All">
 
-    numberInput.addEventListener("input", (e) => {
-      e.target.value = e.target.value.replace(/\D/g, "").slice(0, 7);
-      updatePreview();
-    });
+  <button onclick="startBulk()">Start Bulk SMS</button>
+  <div id="bulkStatus" class="status">Idle</div>
 
-    async function fetchLogs() {
-      const resp = await fetch("http://localhost:3000/sent-logs?limit=200");
-      const logs = await resp.json();
-      renderLogs(logs);
-    }
+  <div class="divider"></div>
 
-    function renderLogs(logs) {
-      if (!logs || logs.length === 0) {
-        logArea.innerHTML = "<p style='text-align:center; color:#6c757d;'>No messages sent yet.</p>";
-        return;
-      }
+  <h2 style="font-size:1rem">Manual SMS</h2>
 
-      let html = `<table>
-      <thead><tr>
-        <th>Membership ID</th><th>Name</th><th>Email</th>
-        <th>Phone</th><th>Time</th><th>Status</th>
-      </tr></thead><tbody>`;
+  <label>Phone Numbers</label>
+  <textarea id="manualNumbers" rows="4" placeholder="One number per line"></textarea>
 
-      logs.forEach((row) => {
-        html += `<tr>
-          <td>${row.membership_id}</td>
-          <td>${row.name}</td>
-          <td>${row.email}</td>
-          <td>******${row.last4}</td>
-          <td>${new Date(row.timestamp).toLocaleString()}</td>
-          <td>${row.status}</td>
-        </tr>`;
-      });
+  <label>Message</label>
+  <textarea id="manualMessage" rows="3" placeholder="Enter SMS text"></textarea>
 
-      html += "</tbody></table>";
-      logArea.innerHTML = html;
-    }
+  <button onclick="sendManual()">Send Manual SMS</button>
+</div>
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const prefix = prefixSelect.value;
-      const number = numberInput.value.trim();
-      if (!/^\d{7}$/.test(number)) return;
+</div>
 
-      sendBtn.disabled = true;
-      const membershipId = prefix + number;
+<!-- LOGS -->
+<div class="logs">
+  <h2>Sent Messages Report</h2>
+  <div id="logs">No messages sent yet.</div>
+</div>
 
-      const response = await fetch("http://localhost:3000/send-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ membership_id: membershipId }),
-      });
+</div>
 
-      await fetchLogs();
-      sendBtn.disabled = false;
-    });
+<script>
+async function fetchLogs(){
+  const r = await fetch("/sent-logs");
+  const d = await r.json();
 
-    // ADMIN BULK SEND
-    const startBulkBtn = document.getElementById("startBulkBtn");
-    const cancelBulkBtn = document.getElementById("cancelBulkBtn");
-    const bulkStatus = document.getElementById("bulkStatus");
-    let bulkAbortController = null;
+  if (!d.length) {
+    logs.innerHTML = "No messages sent yet.";
+    return;
+  }
 
-    startBulkBtn.addEventListener("click", async () => {
-      const payload = {
-        batchSize: parseInt(document.getElementById("adminBatchSize").value),
-        delayMs: parseInt(document.getElementById("adminDelayMs").value),
-        start: parseInt(document.getElementById("adminStart").value),
-        limit: document.getElementById("adminLimit").value || undefined
-      };
+  let h = `
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Date & Time</th>
+        <th>Status</th>
+      </tr>`;
 
-      startBulkBtn.disabled = true;
-      cancelBulkBtn.disabled = false;
-      bulkStatus.textContent = "Running...";
+  d.forEach(x => {
+    h += `
+      <tr>
+        <td>${x.membership_id}</td>
+        <td>${x.name || "-"}</td>
+        <td>${x.email || "-"}</td>
+        <td>******${x.last4}</td>
+        <td>${new Date(x.timestamp).toLocaleString()}</td>
+        <td><span class="tag">${x.status}</span></td>
+      </tr>`;
+  });
 
-      bulkAbortController = new AbortController();
+  logs.innerHTML = h + "</table>";
+}
 
-      try {
-        await fetch("http://localhost:3000/bulk-send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          signal: bulkAbortController.signal,
-        });
 
-        bulkStatus.textContent = "Completed";
-      } catch (err) {
-        bulkStatus.textContent = err.name === "AbortError" ? "Cancelled" : "Failed";
-      }
+async function sendSingle(){
+  if(!/^\d{7}$/.test(number.value))return;
+  await fetch("/send-password",{method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({membership_id:prefix.value+number.value})});
+  fetchLogs();
+}
 
-      cancelBulkBtn.disabled = true;
-      startBulkBtn.disabled = false;
-      bulkAbortController = null;
-      fetchLogs();
-    });
+async function uploadExcel(){
+  const file=excelFile.files[0];
+  if(!file){uploadStatus.textContent="Please select a file";return;}
+  const fd=new FormData();
+  fd.append("file",file);
+  const r=await fetch("/upload-excel",{method:"POST",body:fd});
+  const d=await r.json();
+  uploadStatus.textContent=`${d.message} (${d.totalMembers} members)`;
+  fetchLogs();
+}
 
-    cancelBulkBtn.addEventListener("click", () => {
-      if (bulkAbortController) {
-        bulkAbortController.abort();
-        cancelBulkBtn.disabled = true;
-        bulkStatus.textContent = "Cancelling...";
-      }
-    });
+async function startBulk(){
+  bulkStatus.textContent="Running...";
+  await fetch("/bulk-send",{method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({
+    batchSize:+batchSize.value,
+    delayMs:+delayMs.value,
+    start:+startIndex.value,
+    limit:limit.value||undefined
+  })});
+  bulkStatus.textContent="Completed";
+  fetchLogs();
+}
 
-    fetchLogs();
-    setInterval(fetchLogs, 10000);
-  </script>
+async function sendManual(){
+  const nums=manualNumbers.value.split("\n");
+  await fetch("/send-manual-numbers",{method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({numbers:nums,message:manualMessage.value})});
+  fetchLogs();
+}
 
+fetchLogs();
+</script>
 </body>
 </html>
