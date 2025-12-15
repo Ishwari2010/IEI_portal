@@ -11,22 +11,31 @@ const PORT = 3000;
 const SIMULATION_MODE = true; // set to false when you plug a real SMS provider
 const AUTO_RUN_BULK = false; // set to true to auto-start bulk job on server start (for demo)
 
-// Middleware
+// -------------------- Middleware --------------------
 app.use(cors());
-app.use(express.json()); // to read JSON body
+app.use(express.json());
+
+// ==================== FRONTEND SERVING (FIX) ====================
+app.use(express.static(path.join(__dirname, "IEI_frontend")));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "IEI_frontend", "index.html"));
+});
+// ================================================================
+
 
 // ---------- Load Excel at startup ----------
 const excelPath = path.join(__dirname, "iei_processed_members.xlsx");
 
 // Read the workbook
 const workbook = XLSX.readFile(excelPath);
-const sheetName = workbook.SheetNames[0]; // first sheet
+const sheetName = workbook.SheetNames[0];
 const worksheet = workbook.Sheets[sheetName];
 
 // Convert sheet to JSON array
 let members = XLSX.utils.sheet_to_json(worksheet);
 
-// Normalize fields and ensure password field exists in memory (not persisted to Excel)
+// ---------- Password generator ----------
 function generatePassword(length = 10) {
   const chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
@@ -37,6 +46,7 @@ function generatePassword(length = 10) {
   return pwd;
 }
 
+// ---------- Normalize members ----------
 members = members.map((m) => {
   const normalized = {
     ...m,
@@ -47,7 +57,6 @@ members = members.map((m) => {
     phoneno: m.phoneno ? String(m.phoneno) : null,
   };
 
-  // If there is no password in the spreadsheet, leave undefined - will generate on first send
   if (!normalized.password) {
     normalized.password = undefined;
   }
@@ -57,7 +66,6 @@ members = members.map((m) => {
 
 console.log(`Loaded ${members.length} members from Excel`);
 
-// DEBUG: print first 20 members to verify data (index -> membership_id -> phone)
 members.slice(0, 20).forEach((m, idx) =>
   console.log(
     `[DATA] ${idx}: ${m.membership_id} -> ${m.phoneno_clean || m.phoneno || "NO_PHONE"}`
@@ -65,227 +73,99 @@ members.slice(0, 20).forEach((m, idx) =>
 );
 
 // ---------- In-memory sent logs ----------
-const sentLogs = []; // newest first
+const sentLogs = [];
 
-// ---------- Notification / SMS service layer ----------
+// ---------- SMS layer ----------
 async function sendSms(phone, messageText) {
   if (SIMULATION_MODE) {
-    // Simulation: no real SMS sent. Just log to console and return a simulated result.
     console.log(`[SIMULATION] SMS to ${phone}: "${messageText}"`);
-    return { status: "simulated", info: "No real SMS sent in demo" };
+    return { status: "simulated" };
   }
-
-  // REAL mode (placeholder). Replace with real provider integration.
-  // Example (pseudocode):
-  // const apiKey = process.env.SMS_API_KEY;
-  // if (!apiKey) throw new Error("SMS_API_KEY not configured");
-  // const response = await fetch(providerUrl, { method: "POST", headers: {...}, body: JSON.stringify({...}) });
-  // const data = await response.json();
-  // return data;
 
   const apiKey = process.env.SMS_API_KEY;
-  if (!apiKey) {
-    throw new Error("SMS_API_KEY not configured");
-  }
-  throw new Error("Real SMS mode is not implemented yet.");
+  if (!apiKey) throw new Error("SMS_API_KEY not configured");
+
+  throw new Error("Real SMS mode not implemented");
 }
 
-// ---------- Helper: sleep ----------
+// ---------- Helpers ----------
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ---------- Helper: send to one member (re-uses sendSms and sentLogs) ----------
 async function sendToMemberAndLog(member) {
   const phone =
     member.phoneno_clean && member.phoneno_clean !== "null"
       ? member.phoneno_clean
       : member.phoneno;
-  if (!phone) {
-    console.log(`[SKIP] No phone for ${member.membership_id}`);
-    // record skip in logs optionally
-    const nowSkip = new Date().toISOString();
-    sentLogs.unshift({
-      membership_id: member.membership_id,
-      name: member.name || "",
-      email: member.email || "",
-      phone: null,
-      last4: null,
-      status: "skipped",
-      timestamp: nowSkip,
-      providerResult: { reason: "no-phone" },
-    });
-    if (sentLogs.length > 5000) sentLogs.length = 5000;
-    return { status: "skipped", reason: "no-phone", membership_id: member.membership_id };
-  }
+
+  if (!phone) return;
 
   if (!member.password) {
     member.password = generatePassword(10);
   }
-  const password = member.password;
-  const smsText = `Your IEI portal password is: ${password}`;
-  try {
-    const smsResult = await sendSms(String(phone), smsText);
-    const now = new Date().toISOString();
-    sentLogs.unshift({
-      membership_id: member.membership_id,
-      name: member.name || "",
-      email: member.email || "",
-      phone: String(phone),
-      last4: String(phone).slice(-4),
-      status: SIMULATION_MODE ? "simulated" : "sent",
-      timestamp: now,
-      providerResult: smsResult,
-    });
-    if (sentLogs.length > 5000) sentLogs.length = 5000;
-    console.log(`[BULK] Sent to ${member.membership_id} (${String(phone).slice(-4)})`);
-    return { status: "ok", membership_id: member.membership_id };
-  } catch (err) {
-    console.error(`[BULK] Error sending to ${member.membership_id}:`, err);
-    const now = new Date().toISOString();
-    sentLogs.unshift({
-      membership_id: member.membership_id,
-      name: member.name || "",
-      email: member.email || "",
-      phone: String(phone),
-      last4: String(phone).slice(-4),
-      status: "failed",
-      timestamp: now,
-      providerResult: { error: String(err) },
-    });
-    if (sentLogs.length > 5000) sentLogs.length = 5000;
-    return { status: "failed", membership_id: member.membership_id, error: String(err) };
-  }
+
+  const smsText = `Your IEI portal password is: ${member.password}`;
+  const result = await sendSms(String(phone), smsText);
+
+  sentLogs.unshift({
+  membership_id: member.membership_id,
+  name: member.name || "",
+  email: member.email || "",
+  phone: String(phone),
+  last4: String(phone).slice(-4),
+  status: SIMULATION_MODE ? "simulated" : "sent",
+  timestamp: new Date().toISOString(),
+  providerResult: result,
+});
+
+
+  if (sentLogs.length > 5000) sentLogs.length = 5000;
 }
 
-// ---------- Reusable bulk runner ----------
-/**
- * options: { batchSize, delayMs, start, limit }
- * - batchSize: number of members per batch
- * - delayMs: milliseconds to wait between batches
- * - start: start index in members array
- * - limit: how many members to process (undefined => until end)
- */
-async function runBulkOptions({ batchSize = 5, delayMs = 3000, start = 0, limit = undefined } = {}) {
-  const totalMembers = members.length;
-  const from = Math.max(0, Math.min(start, totalMembers - 1));
-  const maxLimit = limit !== undefined ? Math.max(0, Math.min(limit, totalMembers - from)) : totalMembers - from;
-  const endIndexExclusive = from + maxLimit;
+// ---------- Bulk runner ----------
+async function runBulkOptions({ batchSize = 5, delayMs = 3000, start = 0, limit } = {}) {
+  const end =
+    limit !== undefined ? Math.min(start + limit, members.length) : members.length;
 
-  console.log(
-    `[BULK] runBulkOptions start=${from} end=${endIndexExclusive - 1} batchSize=${batchSize} delayMs=${delayMs}`
-  );
-
-  for (let i = from; i < endIndexExclusive; i += batchSize) {
-    const batch = members.slice(i, Math.min(i + batchSize, endIndexExclusive));
-    console.log(`[BULK] Processing batch for indices ${i}..${i + batch.length - 1}`);
-
-    // sequential sending inside batch (safer for rate limits). For parallel use Promise.all.
+  for (let i = start; i < end; i += batchSize) {
+    const batch = members.slice(i, i + batchSize);
     for (const m of batch) {
       await sendToMemberAndLog(m);
     }
-
-    if (i + batchSize < endIndexExclusive) {
-      console.log(`[BULK] Waiting ${delayMs} ms before next batch...`);
-      await sleep(delayMs);
-    }
+    if (i + batchSize < end) await sleep(delayMs);
   }
-
-  console.log("[BULK] runBulkOptions completed.");
 }
 
-// ---------- API endpoint: send-password (single) ----------
+// ---------- API routes ----------
 app.post("/send-password", async (req, res) => {
   try {
     const { membership_id } = req.body;
-
     if (!membership_id) {
-      return res.status(400).json({ message: "membership_id is required" });
+      return res.status(400).json({ message: "membership_id required" });
     }
 
-    const member = members.find((m) => m.membership_id === String(membership_id).trim());
+    const member = members.find(
+      (m) => m.membership_id === String(membership_id).trim()
+    );
 
     if (!member) {
-      return res.status(404).json({ message: "Membership ID not found" });
+      return res.status(404).json({ message: "Member not found" });
     }
 
-    const phone =
-      member.phoneno_clean && member.phoneno_clean !== "null" ? member.phoneno_clean : member.phoneno;
-
-    if (!phone) {
-      return res.status(500).json({ message: "Phone number not available for this member" });
-    }
-
-    const phoneStr = String(phone);
-    const last4 = phoneStr.slice(-4);
-
-    // Generate and store password in memory if not already present
-    if (!member.password) {
-      member.password = generatePassword(10);
-    }
-    const password = member.password;
-
-    const smsText = `Your IEI portal password is: ${password}`;
-
-    // send via notification layer (simulation or real)
-    const smsResult = await sendSms(phoneStr, smsText);
-
-    // Record the send attempt in sentLogs (newest first)
-    const now = new Date().toISOString();
-    sentLogs.unshift({
-      membership_id: member.membership_id,
-      name: member.name || "",
-      email: member.email || "",
-      phone: phoneStr,
-      last4: last4,
-      status: SIMULATION_MODE ? "simulated" : "sent",
-      timestamp: now,
-      providerResult: smsResult,
-    });
-
-    if (sentLogs.length > 5000) sentLogs.length = 5000;
-
-    return res.json({
-      status: SIMULATION_MODE ? "simulated" : "sent",
-      message: SIMULATION_MODE ? "SMS sending simulated (no real SMS sent in demo)." : "Password SMS sent successfully.",
-      last4: last4,
-    });
+    await sendToMemberAndLog(member);
+    res.json({ status: SIMULATION_MODE ? "simulated" : "sent" });
   } catch (err) {
-    console.error("Error in /send-password:", err);
-    return res.status(500).json({ message: "Failed to process request. Please try again." });
+    res.status(500).json({ message: "Failed" });
   }
 });
 
-// ---------- Bulk send endpoint ----------
-/**
- * Request body (all optional):
- * {
- *   "batchSize": 5,
- *   "delayMs": 3000,
- *   "start": 0,
- *   "limit": 100
- * }
- */
 app.post("/bulk-send", async (req, res) => {
-  try {
-    const batchSize = parseInt(req.body.batchSize) || 5;
-    const delayMs = parseInt(req.body.delayMs) || 3000;
-    const start = parseInt(req.body.start) || 0;
-    const limit = req.body.limit !== undefined ? parseInt(req.body.limit) : undefined;
-
-    // run bulk (keeps the request open until finished)
-    await runBulkOptions({ batchSize, delayMs, start, limit });
-
-    return res.json({ message: "Bulk send completed", processedFrom: start, processedTo: limit !== undefined ? start + limit - 1 : members.length - 1 });
-  } catch (err) {
-    console.error("[BULK] Error in bulk-send:", err);
-    return res.status(500).json({ message: "Bulk send failed", error: String(err) });
-  }
+  await runBulkOptions(req.body || {});
+  res.json({ message: "Bulk send completed" });
 });
 
-// ---------- API endpoint: get sent logs ----------
 app.get("/sent-logs", (req, res) => {
-  // Optional limit query param
   const limit = parseInt(req.query.limit) || 200;
   res.json(sentLogs.slice(0, limit));
 });
@@ -293,15 +173,4 @@ app.get("/sent-logs", (req, res) => {
 // ---------- Start server ----------
 app.listen(PORT, () => {
   console.log(`Node backend running on http://localhost:${PORT}`);
-
-  // Auto-run bulk (for demo) if enabled
-  if (AUTO_RUN_BULK) {
-    // small delay to ensure server fully initialized
-    setTimeout(() => {
-      // example defaults: 5 per batch, 3000ms delay, start 0, limit 20
-      runBulkOptions({ batchSize: 5, delayMs: 3000, start: 0, limit: Math.min(20, members.length) }).catch((err) =>
-        console.error("Auto bulk run failed:", err)
-      );
-    }, 1000);
-  }
 });
