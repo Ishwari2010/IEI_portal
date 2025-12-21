@@ -1,4 +1,7 @@
 // server.js
+require("dotenv").config();
+
+
 const express = require("express");
 const cors = require("cors");
 const XLSX = require("xlsx");
@@ -9,7 +12,7 @@ const app = express();
 const PORT = 3000;
 
 // -------------------- Config --------------------
-const SIMULATION_MODE = true;
+const SIMULATION_MODE = false;
 
 // -------------------- Middleware --------------------
 app.use(cors());
@@ -54,18 +57,69 @@ const sentLogs = [];
 
 // -------------------- SMS Layer --------------------
 async function sendSms(phone, messageText) {
-  if (SIMULATION_MODE) {
-    console.log(`[SIMULATION] SMS to ${phone}: ${messageText}`);
-    return { status: "simulated" };
+  const apiKey = process.env.FAST2SMS_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("FAST2SMS_API_KEY not configured");
   }
-  throw new Error("Real SMS not configured");
+
+  const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+    method: "POST",
+    headers: {
+      authorization: apiKey,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      route: "q",
+      message: messageText,
+      numbers: phone
+    })
+  });
+
+  const data = await response.json();
+
+  if (!data.return) {
+    throw new Error("Fast2SMS failed: " + JSON.stringify(data));
+  }
+
+  return data;
 }
 
+
 // -------------------- Helpers --------------------
-function generatePassword(length = 10) {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+function generatePassword() {
+  const minLength = 8;
+  const maxLength = 15;
+
+  const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const lower = "abcdefghijklmnopqrstuvwxyz";
+  const numbers = "0123456789";
+  const special = "!@#$%^&*";
+
+  const allChars = upper + lower + numbers + special;
+
+  // Random length between 8 and 15
+  const length =
+    Math.floor(Math.random() * (maxLength - minLength + 1)) + minLength;
+
+  let password = [
+    upper[Math.floor(Math.random() * upper.length)],      // 1 uppercase
+    lower[Math.floor(Math.random() * lower.length)],      // 1 lowercase
+    numbers[Math.floor(Math.random() * numbers.length)],  // 1 number
+    special[Math.floor(Math.random() * special.length)],  // 1 special
+  ];
+
+  // Fill remaining length
+  while (password.length < length) {
+    password.push(allChars[Math.floor(Math.random() * allChars.length)]);
+  }
+
+  // Shuffle password characters
+  password = password.sort(() => Math.random() - 0.5);
+
+  return password.join("");
 }
+
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
