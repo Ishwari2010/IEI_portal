@@ -127,22 +127,58 @@ function sleep(ms) {
 
 async function sendToMemberAndLog(member) {
   const phone = member.phoneno_clean || member.phoneno;
-  if (!phone) return;
+  if (!phone) {
+    return { success: false, error: "No phone number available" };
+  }
 
   if (!member.password) member.password = generatePassword();
 
-  const result = await sendSms(phone, `Your IEI portal password is: ${member.password}`);
+  try {
+    const result = await sendSms(phone, `Your IEI portal password is: ${member.password}`);
+    
+    const logEntry = {
+      membership_id: member.membership_id,
+      name: member.name,
+      email: member.email,
+      phone,
+      last4: phone.slice(-4),
+      status: SIMULATION_MODE ? "simulated" : "sent",
+      timestamp: new Date().toISOString(),
+      providerResult: result,
+    };
 
-  sentLogs.unshift({
-    membership_id: member.membership_id,
-    name: member.name,
-    email: member.email,
-    phone,
-    last4: phone.slice(-4),
-    status: SIMULATION_MODE ? "simulated" : "sent",
-    timestamp: new Date().toISOString(),
-    providerResult: result,
-  });
+    sentLogs.unshift(logEntry);
+
+    // Check Fast2SMS response for delivery status
+    const isSuccess = SIMULATION_MODE ? true : (result && result.return === true);
+    const messageId = result?.request_id || null;
+
+    return {
+      success: isSuccess,
+      message: SIMULATION_MODE ? "SMS simulated (simulation mode)" : (isSuccess ? "SMS sent successfully" : "SMS sending may have failed"),
+      messageId,
+      phone: phone.slice(-4), // Last 4 digits for display
+      providerResponse: result
+    };
+  } catch (error) {
+    const logEntry = {
+      membership_id: member.membership_id,
+      name: member.name,
+      email: member.email,
+      phone,
+      last4: phone.slice(-4),
+      status: "failed",
+      timestamp: new Date().toISOString(),
+      error: error.message,
+    };
+    sentLogs.unshift(logEntry);
+
+    return {
+      success: false,
+      error: error.message || "Failed to send SMS",
+      phone: phone.slice(-4)
+    };
+  }
 }
 
 // -------------------- APIs --------------------
@@ -162,47 +198,167 @@ app.post("/upload-excel", upload.single("file"), (req, res) => {
 
 // Single send
 app.post("/send-password", async (req, res) => {
-  const member = members.find(m => m.membership_id === req.body.membership_id);
-  if (!member) return res.status(404).json({ message: "Member not found" });
-  await sendToMemberAndLog(member);
-  res.json({ status: "ok" });
+  try {
+    const member = members.find(m => m.membership_id === req.body.membership_id);
+    if (!member) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Member not found",
+        error: "No member found with the provided membership ID"
+      });
+    }
+
+    const result = await sendToMemberAndLog(member);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: result.message,
+        messageId: result.messageId,
+        phone: result.phone,
+        memberName: member.name
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.error || "Failed to send SMS",
+        error: result.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while sending SMS",
+      error: error.message
+    });
+  }
 });
 
 // Bulk send
 app.post("/bulk-send", async (req, res) => {
-  const { batchSize = 5, delayMs = 3000, start = 0, limit } = req.body;
-  const end = limit ? start + limit : members.length;
+  try {
+    const { batchSize = 5, delayMs = 3000, start = 0, limit } = req.body;
+    const end = limit ? start + limit : members.length;
+    
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
 
-  for (let i = start; i < end; i += batchSize) {
-    for (const m of members.slice(i, i + batchSize)) {
-      await sendToMemberAndLog(m);
+    for (let i = start; i < end; i += batchSize) {
+      for (const m of members.slice(i, i + batchSize)) {
+        const result = await sendToMemberAndLog(m);
+        if (result && result.success) {
+          successCount++;
+        } else {
+          failCount++;
+          if (result && result.error) {
+            errors.push(`${m.membership_id}: ${result.error}`);
+          }
+        }
+      }
+      await sleep(delayMs);
     }
-    await sleep(delayMs);
+
+    res.json({
+      success: true,
+      message: "Bulk send completed",
+      stats: {
+        total: successCount + failCount,
+        successful: successCount,
+        failed: failCount
+      },
+      errors: errors.length > 0 ? errors.slice(0, 10) : [] // Limit to first 10 errors
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Bulk send failed",
+      error: error.message
+    });
   }
-  res.json({ message: "Bulk send completed" });
 });
 
 // Manual numbers
 app.post("/send-manual-numbers", async (req, res) => {
-  const { numbers, message } = req.body;
+  try {
+    const { numbers, message } = req.body;
+    
+    if (!numbers || !Array.isArray(numbers) || numbers.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No phone numbers provided",
+        error: "Please provide at least one phone number"
+      });
+    }
 
-  for (const n of numbers) {
-    const phone = String(n).replace(/\D/g, "");
-    if (phone.length < 10) continue;
+    let successCount = 0;
+    let failCount = 0;
+    const results = [];
 
-    await sendSms(phone, message || "IEI Notification");
+    for (const n of numbers) {
+      const phone = String(n).replace(/\D/g, "");
+      if (phone.length < 10) {
+        failCount++;
+        results.push({ phone: phone || n, success: false, error: "Invalid phone number" });
+        continue;
+      }
 
-    sentLogs.unshift({
-      membership_id: "MANUAL",
-      name: "Manual Entry",
-      email: "",
-      phone,
-      last4: phone.slice(-4),
-      status: SIMULATION_MODE ? "simulated" : "sent",
-      timestamp: new Date().toISOString(),
+      try {
+        const result = await sendSms(phone, message || "IEI Notification");
+        const isSuccess = result && result.return === true;
+
+        sentLogs.unshift({
+          membership_id: "MANUAL",
+          name: "Manual Entry",
+          email: "",
+          phone,
+          last4: phone.slice(-4),
+          status: SIMULATION_MODE ? "simulated" : (isSuccess ? "sent" : "failed"),
+          timestamp: new Date().toISOString(),
+          providerResult: result,
+        });
+
+        if (isSuccess) {
+          successCount++;
+          results.push({ phone: phone.slice(-4), success: true, messageId: result.request_id });
+        } else {
+          failCount++;
+          results.push({ phone: phone.slice(-4), success: false, error: "SMS provider returned error" });
+        }
+      } catch (error) {
+        failCount++;
+        results.push({ phone: phone.slice(-4), success: false, error: error.message });
+        
+        sentLogs.unshift({
+          membership_id: "MANUAL",
+          name: "Manual Entry",
+          email: "",
+          phone,
+          last4: phone.slice(-4),
+          status: "failed",
+          timestamp: new Date().toISOString(),
+          error: error.message,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `SMS sent to ${successCount} number(s), ${failCount} failed`,
+      stats: {
+        total: numbers.length,
+        successful: successCount,
+        failed: failCount
+      },
+      results: results
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to send manual SMS",
+      error: error.message
     });
   }
-  res.json({ message: "SMS sent to manual numbers" });
 });
 
 // Logs
