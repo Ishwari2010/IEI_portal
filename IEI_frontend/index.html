@@ -41,7 +41,11 @@ button{
 }
 button:hover{background:var(--primary-dark);}
 .divider{height:1px;background:#e5e7eb;margin:20px 0;}
-.status{margin-top:8px;font-size:.85rem;color:#0369a1;}
+.status{margin-top:8px;font-size:.85rem;color:#0369a1;min-height:20px;}
+.status.success{color:#059669;background:#d1fae5;padding:8px 12px;border-radius:8px;margin-top:12px;}
+.status.error{color:#dc2626;background:#fee2e2;padding:8px 12px;border-radius:8px;margin-top:12px;}
+.status.loading{color:#0369a1;background:#dbeafe;padding:8px 12px;border-radius:8px;margin-top:12px;}
+button:disabled{opacity:0.6;cursor:not-allowed;}
 .logs{
   margin-top:30px;background:white;border-radius:16px;
   padding:22px;box-shadow:0 18px 35px rgba(0,0,0,.18);
@@ -50,6 +54,7 @@ table{width:100%;border-collapse:collapse;font-size:.85rem;}
 th,td{padding:10px;border-bottom:1px solid #e5e7eb;}
 th{background:#f9fafb;}
 .tag{padding:4px 10px;border-radius:999px;background:#e0f2fe;color:#0369a1;font-size:.7rem;}
+.tag.error{background:#fee2e2;color:#dc2626;}
 </style>
 </head>
 
@@ -80,7 +85,8 @@ th{background:#f9fafb;}
   <label>Membership Number</label>
   <input id="number" maxlength="7" placeholder="7-digit number">
 
-  <button onclick="sendSingle()">Send Password</button>
+  <button id="sendSingleBtn" onclick="sendSingle()">Send Password</button>
+  <div id="singleStatus" class="status"></div>
 </div>
 
 <!-- ADMIN -->
@@ -121,7 +127,8 @@ th{background:#f9fafb;}
   <label>Message</label>
   <textarea id="manualMessage" rows="3" placeholder="Enter SMS text"></textarea>
 
-  <button onclick="sendManual()">Send Manual SMS</button>
+  <button id="sendManualBtn" onclick="sendManual()">Send Manual SMS</button>
+  <div id="manualStatus" class="status"></div>
 </div>
 
 </div>
@@ -156,6 +163,8 @@ async function fetchLogs(){
       </tr>`;
 
   d.forEach(x => {
+    const statusClass = x.status === "sent" ? "tag" : x.status === "failed" ? "tag error" : "tag";
+    const statusText = x.status === "sent" ? "✅ Sent" : x.status === "failed" ? "❌ Failed" : x.status || "Unknown";
     h += `
       <tr>
         <td>${x.membership_id}</td>
@@ -163,7 +172,7 @@ async function fetchLogs(){
         <td>${x.email || "-"}</td>
         <td>******${x.last4}</td>
         <td>${new Date(x.timestamp).toLocaleString()}</td>
-        <td><span class="tag">${x.status}</span></td>
+        <td><span class="${statusClass}">${statusText}</span></td>
       </tr>`;
   });
 
@@ -172,10 +181,48 @@ async function fetchLogs(){
 
 
 async function sendSingle(){
-  if(!/^\d{7}$/.test(number.value))return;
-  await fetch("/send-password",{method:"POST",headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({membership_id:prefix.value+number.value})});
-  fetchLogs();
+  const membershipId = prefix.value + number.value;
+  
+  if(!/^\d{7}$/.test(number.value)){
+    singleStatus.className = "status error";
+    singleStatus.textContent = "❌ Please enter a valid 7-digit membership number";
+    return;
+  }
+
+  const btn = document.getElementById("sendSingleBtn");
+  const statusDiv = document.getElementById("singleStatus");
+  
+  // Show loading state
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+  statusDiv.className = "status loading";
+  statusDiv.textContent = "⏳ Sending SMS...";
+
+  try {
+    const response = await fetch("/send-password", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({membership_id: membershipId})
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      statusDiv.className = "status success";
+      statusDiv.innerHTML = `✅ <strong>Success!</strong> SMS sent to ${data.memberName || "member"} (Phone: ******${data.phone})<br>
+        <small>Message ID: ${data.messageId || "N/A"}</small>`;
+    } else {
+      statusDiv.className = "status error";
+      statusDiv.innerHTML = `❌ <strong>Failed:</strong> ${data.message || data.error || "Unknown error"}`;
+    }
+  } catch (error) {
+    statusDiv.className = "status error";
+    statusDiv.innerHTML = `❌ <strong>Error:</strong> ${error.message || "Network error. Please try again."}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Send Password";
+    fetchLogs();
+  }
 }
 
 async function uploadExcel(){
@@ -190,23 +237,109 @@ async function uploadExcel(){
 }
 
 async function startBulk(){
-  bulkStatus.textContent="Running...";
-  await fetch("/bulk-send",{method:"POST",headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({
-    batchSize:+batchSize.value,
-    delayMs:+delayMs.value,
-    start:+startIndex.value,
-    limit:limit.value||undefined
-  })});
-  bulkStatus.textContent="Completed";
-  fetchLogs();
+  const btn = document.querySelector("button[onclick='startBulk()']");
+  const statusDiv = document.getElementById("bulkStatus");
+  
+  btn.disabled = true;
+  statusDiv.className = "status loading";
+  statusDiv.textContent = "⏳ Running... Please wait, this may take a while...";
+
+  try {
+    const response = await fetch("/bulk-send", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        batchSize: +batchSize.value,
+        delayMs: +delayMs.value,
+        start: +startIndex.value,
+        limit: limit.value || undefined
+      })
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      statusDiv.className = "status success";
+      statusDiv.innerHTML = `✅ <strong>Completed!</strong><br>
+        Total: ${data.stats.total} | 
+        Successful: ${data.stats.successful} | 
+        Failed: ${data.stats.failed}`;
+      
+      if (data.errors && data.errors.length > 0) {
+        statusDiv.innerHTML += `<br><small>Some errors occurred. Check logs for details.</small>`;
+      }
+    } else {
+      statusDiv.className = "status error";
+      statusDiv.innerHTML = `❌ <strong>Failed:</strong> ${data.message || data.error || "Unknown error"}`;
+    }
+  } catch (error) {
+    statusDiv.className = "status error";
+    statusDiv.innerHTML = `❌ <strong>Error:</strong> ${error.message || "Network error. Please try again."}`;
+  } finally {
+    btn.disabled = false;
+    fetchLogs();
+  }
 }
 
 async function sendManual(){
-  const nums=manualNumbers.value.split("\n");
-  await fetch("/send-manual-numbers",{method:"POST",headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({numbers:nums,message:manualMessage.value})});
-  fetchLogs();
+  const nums = manualNumbers.value.split("\n").filter(n => n.trim());
+  
+  if (nums.length === 0) {
+    manualStatus.className = "status error";
+    manualStatus.textContent = "❌ Please enter at least one phone number";
+    return;
+  }
+
+  if (!manualMessage.value.trim()) {
+    manualStatus.className = "status error";
+    manualStatus.textContent = "❌ Please enter a message";
+    return;
+  }
+
+  const btn = document.getElementById("sendManualBtn");
+  const statusDiv = document.getElementById("manualStatus");
+  
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+  statusDiv.className = "status loading";
+  statusDiv.textContent = `⏳ Sending SMS to ${nums.length} number(s)...`;
+
+  try {
+    const response = await fetch("/send-manual-numbers", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        numbers: nums,
+        message: manualMessage.value
+      })
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      statusDiv.className = "status success";
+      statusDiv.innerHTML = `✅ <strong>${data.message}</strong><br>
+        <small>Successful: ${data.stats.successful} | Failed: ${data.stats.failed}</small>`;
+      
+      // Show details if there are failures
+      if (data.stats.failed > 0 && data.results) {
+        const failed = data.results.filter(r => !r.success);
+        if (failed.length > 0) {
+          statusDiv.innerHTML += `<br><small style="color:#dc2626;">Failed numbers: ${failed.map(f => f.phone).join(", ")}</small>`;
+        }
+      }
+    } else {
+      statusDiv.className = "status error";
+      statusDiv.innerHTML = `❌ <strong>Failed:</strong> ${data.message || data.error || "Unknown error"}`;
+    }
+  } catch (error) {
+    statusDiv.className = "status error";
+    statusDiv.innerHTML = `❌ <strong>Error:</strong> ${error.message || "Network error. Please try again."}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Send Manual SMS";
+    fetchLogs();
+  }
 }
 
 fetchLogs();
