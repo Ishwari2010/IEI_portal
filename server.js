@@ -14,6 +14,12 @@ const PORT = 3000;
 // -------------------- Config --------------------
 const SIMULATION_MODE = false;
 
+// ================= MESSAGE TEMPLATE (EDITABLE) =================
+let smsTemplate = `
+Your Membership ID: {membership_id}
+Your IEI Portal Password: {password}
+`;
+
 // -------------------- Middleware --------------------
 app.use(cors());
 app.use(express.json());
@@ -133,8 +139,13 @@ async function sendToMemberAndLog(member) {
 
   if (!member.password) member.password = generatePassword();
 
+  // Build final message using template
+  const messageText = smsTemplate
+    .replace("{membership_id}", member.membership_id)
+    .replace("{password}", member.password);
+
   try {
-    const result = await sendSms(phone, `Your IEI portal password is: ${member.password}`);
+    const result = await sendSms(phone, messageText);
     
     const logEntry = {
       membership_id: member.membership_id,
@@ -142,23 +153,18 @@ async function sendToMemberAndLog(member) {
       email: member.email,
       phone,
       last4: phone.slice(-4),
-      status: SIMULATION_MODE ? "simulated" : "sent",
+      status: SIMULATION_MODE ? "simulated" : (result.return ? "sent" : "failed"),
       timestamp: new Date().toISOString(),
       providerResult: result,
     };
 
     sentLogs.unshift(logEntry);
 
-    // Check Fast2SMS response for delivery status
-    const isSuccess = SIMULATION_MODE ? true : (result && result.return === true);
-    const messageId = result?.request_id || null;
-
     return {
-      success: isSuccess,
-      message: SIMULATION_MODE ? "SMS simulated (simulation mode)" : (isSuccess ? "SMS sent successfully" : "SMS sending may have failed"),
-      messageId,
-      phone: phone.slice(-4), // Last 4 digits for display
-      providerResponse: result
+      success: result.return === true,
+      message: result.return ? "SMS sent successfully" : "SMS sending may have failed",
+      messageId: result.request_id || null,
+      phone: phone.slice(-4)
     };
   } catch (error) {
     const logEntry = {
@@ -175,11 +181,12 @@ async function sendToMemberAndLog(member) {
 
     return {
       success: false,
-      error: error.message || "Failed to send SMS",
+      error: error.message,
       phone: phone.slice(-4)
     };
   }
 }
+
 
 // -------------------- APIs --------------------
 
@@ -359,6 +366,21 @@ app.post("/send-manual-numbers", async (req, res) => {
       error: error.message
     });
   }
+});
+
+// ================= UPDATE SMS TEMPLATE =================
+app.post("/update-template", (req, res) => {
+  const { template } = req.body;
+
+  if (!template || !template.includes("{membership_id}") || !template.includes("{password}")) {
+    return res.status(400).json({
+      success: false,
+      message: "Template must include {membership_id} and {password}"
+    });
+  }
+
+  smsTemplate = template;
+  res.json({ success: true, message: "Template updated successfully" });
 });
 
 // Logs

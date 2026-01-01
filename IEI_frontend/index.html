@@ -119,6 +119,28 @@ th{background:#f9fafb;}
 
   <div class="divider"></div>
 
+  <div class="divider"></div>
+
+<h2 style="font-size:1rem">Bulk SMS Message Template</h2>
+<p>You can edit the message. Use placeholders: {membership_id} and {password}</p>
+
+<textarea id="smsTemplate" rows="5" placeholder="Enter SMS template">
+Dear Member,
+Your IEI Login Credentials are as follows:
+
+Membership ID: {membership_id}
+Password: {password}
+
+Regards,
+IEI Administration
+
+</textarea>
+
+<button onclick="saveTemplate()">Save Template</button>
+<div id="templateStatus" class="status"></div>
+
+<div class="divider"></div>
+
   <h2 style="font-size:1rem">Manual SMS</h2>
 
   <label>Phone Numbers</label>
@@ -339,6 +361,41 @@ async function sendManual(){
     btn.disabled = false;
     btn.textContent = "Send Manual SMS";
     fetchLogs();
+  }
+}
+
+async function saveTemplate() {
+  const templateText = document.getElementById("smsTemplate").value.trim();
+  const status = document.getElementById("templateStatus");
+
+  if (!templateText.includes("{membership_id}") || !templateText.includes("{password}")) {
+    status.className = "status error";
+    status.textContent = "❌ Template must include {membership_id} and {password}";
+    return;
+  }
+
+  status.className = "status loading";
+  status.textContent = "⏳ Saving template...";
+
+  try {
+    const res = await fetch("/update-template", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ template: templateText })
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      status.className = "status success";
+      status.textContent = "✔️ Template saved successfully.";
+    } else {
+      status.className = "status error";
+      status.textContent = "❌ " + (data.message || "Failed to save template");
+    }
+  } catch (error) {
+    status.className = "status error";
+    status.textContent = "❌ Network error. Try again.";
   }
 }
 
