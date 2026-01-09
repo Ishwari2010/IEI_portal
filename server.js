@@ -12,13 +12,20 @@ const app = express();
 const PORT = 3000;
 
 // -------------------- Config --------------------
-const SIMULATION_MODE = false;
+const SIMULATION_MODE = true;
 
 // ================= MESSAGE TEMPLATE (EDITABLE) =================
 let smsTemplate = `
-Your Membership ID: {membership_id}
-Your IEI Portal Password: {password}
+Dear Member,
+Your IEI Login Credentials are as follows:
+
+Membership ID: {membership_id}
+Password: {password}
+
+Regards,
+IEI Administration
 `;
+
 
 // -------------------- Middleware --------------------
 app.use(cors());
@@ -61,8 +68,34 @@ members = normalizeMembers(members);
 // -------------------- Logs --------------------
 const sentLogs = [];
 
+function simulateSms(phone, messageText) {
+  console.log("\n=================================================");
+  console.log("SMS SIMULATION MODE");
+  console.log("TO       :", phone);
+  console.log("MESSAGE  :");
+  console.log(messageText);
+  console.log("STATUS   : SIMULATED (NO API CALL)");
+  console.log("TIME     :", new Date().toISOString());
+  console.log("=================================================\n");
+
+  // Fake success response (Fast2SMS-like)
+  return {
+    return: true,
+    simulated: true,
+    request_id: "SIMULATED_" + Date.now()
+  };
+}
+
+
 // -------------------- SMS Layer --------------------
 async function sendSms(phone, messageText) {
+
+  // 1️⃣ SIMULATION PATH
+  if (SIMULATION_MODE) {
+    return simulateSms(phone, messageText);
+  }
+
+  // 2️⃣ REAL SMS PATH
   const apiKey = process.env.FAST2SMS_API_KEY;
 
   if (!apiKey) {
@@ -90,6 +123,7 @@ async function sendSms(phone, messageText) {
 
   return data;
 }
+
 
 
 // -------------------- Helpers --------------------
