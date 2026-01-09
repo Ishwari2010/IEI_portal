@@ -164,7 +164,9 @@ IEI Administration
 </div>
 
 <script>
-async function fetchLogs(){
+async function fetchLogs() {
+  const logs = document.getElementById("logs");
+
   const r = await fetch("/sent-logs");
   const d = await r.json();
 
@@ -179,33 +181,49 @@ async function fetchLogs(){
         <th>ID</th>
         <th>Name</th>
         <th>Email</th>
+        <th>DOB</th>
         <th>Phone</th>
         <th>Date & Time</th>
         <th>Status</th>
-      </tr>`;
+      </tr>
+  `;
 
   d.forEach(x => {
-    const statusClass = x.status === "sent" ? "tag" : x.status === "failed" ? "tag error" : "tag";
-    const statusText = x.status === "sent" ? "✅ Sent" : x.status === "failed" ? "❌ Failed" : x.status || "Unknown";
+    const statusClass =
+      x.status === "sent"
+        ? "tag"
+        : x.status === "failed"
+        ? "tag error"
+        : "tag";
+
+    const statusText =
+      x.status === "sent"
+        ? "✅ Sent"
+        : x.status === "failed"
+        ? "❌ Failed"
+        : x.status || "Unknown";
+
     h += `
       <tr>
         <td>${x.membership_id}</td>
         <td>${x.name || "-"}</td>
         <td>${x.email || "-"}</td>
+        <td>${x.dob || "N/A"}</td>
         <td>******${x.last4}</td>
         <td>${new Date(x.timestamp).toLocaleString()}</td>
         <td><span class="${statusClass}">${statusText}</span></td>
-      </tr>`;
+      </tr>
+    `;
   });
 
-  logs.innerHTML = h + "</table>";
+  h += "</table>";
+  logs.innerHTML = h;
 }
 
-
-async function sendSingle(){
+async function sendSingle() {
   const membershipId = prefix.value + number.value;
-  
-  if(!/^\d{7}$/.test(number.value)){
+
+  if (!/^\d{7}$/.test(number.value)) {
     singleStatus.className = "status error";
     singleStatus.textContent = "❌ Please enter a valid 7-digit membership number";
     return;
@@ -213,8 +231,7 @@ async function sendSingle(){
 
   const btn = document.getElementById("sendSingleBtn");
   const statusDiv = document.getElementById("singleStatus");
-  
-  // Show loading state
+
   btn.disabled = true;
   btn.textContent = "Sending...";
   statusDiv.className = "status loading";
@@ -223,8 +240,8 @@ async function sendSingle(){
   try {
     const response = await fetch("/send-password", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({membership_id: membershipId})
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ membership_id: membershipId })
     });
 
     const data = await response.json();
@@ -239,7 +256,7 @@ async function sendSingle(){
     }
   } catch (error) {
     statusDiv.className = "status error";
-    statusDiv.innerHTML = `❌ <strong>Error:</strong> ${error.message || "Network error. Please try again."}`;
+    statusDiv.innerHTML = `❌ <strong>Error:</strong> ${error.message || "Network error"}`;
   } finally {
     btn.disabled = false;
     btn.textContent = "Send Password";
@@ -247,29 +264,35 @@ async function sendSingle(){
   }
 }
 
-async function uploadExcel(){
-  const file=excelFile.files[0];
-  if(!file){uploadStatus.textContent="Please select a file";return;}
-  const fd=new FormData();
-  fd.append("file",file);
-  const r=await fetch("/upload-excel",{method:"POST",body:fd});
-  const d=await r.json();
-  uploadStatus.textContent=`${d.message} (${d.totalMembers} members)`;
+async function uploadExcel() {
+  const file = excelFile.files[0];
+  if (!file) {
+    uploadStatus.textContent = "Please select a file";
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append("file", file);
+
+  const r = await fetch("/upload-excel", { method: "POST", body: fd });
+  const d = await r.json();
+
+  uploadStatus.textContent = `${d.message} (${d.totalMembers} members)`;
   fetchLogs();
 }
 
-async function startBulk(){
+async function startBulk() {
   const btn = document.querySelector("button[onclick='startBulk()']");
   const statusDiv = document.getElementById("bulkStatus");
-  
+
   btn.disabled = true;
   statusDiv.className = "status loading";
-  statusDiv.textContent = "⏳ Running... Please wait, this may take a while...";
+  statusDiv.textContent = "⏳ Running...";
 
   try {
     const response = await fetch("/bulk-send", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         batchSize: +batchSize.value,
         delayMs: +delayMs.value,
@@ -282,90 +305,39 @@ async function startBulk(){
 
     if (response.ok && data.success) {
       statusDiv.className = "status success";
-      statusDiv.innerHTML = `✅ <strong>Completed!</strong><br>
-        Total: ${data.stats.total} | 
-        Successful: ${data.stats.successful} | 
+      statusDiv.innerHTML = `✅ Completed<br>
+        Total: ${data.stats.total} |
+        Successful: ${data.stats.successful} |
         Failed: ${data.stats.failed}`;
-      
-      if (data.errors && data.errors.length > 0) {
-        statusDiv.innerHTML += `<br><small>Some errors occurred. Check logs for details.</small>`;
-      }
     } else {
       statusDiv.className = "status error";
-      statusDiv.innerHTML = `❌ <strong>Failed:</strong> ${data.message || data.error || "Unknown error"}`;
+      statusDiv.textContent = data.message || "Failed";
     }
-  } catch (error) {
+  } catch (e) {
     statusDiv.className = "status error";
-    statusDiv.innerHTML = `❌ <strong>Error:</strong> ${error.message || "Network error. Please try again."}`;
+    statusDiv.textContent = "Network error";
   } finally {
     btn.disabled = false;
     fetchLogs();
   }
 }
 
-async function sendManual(){
+async function sendManual() {
   const nums = manualNumbers.value.split("\n").filter(n => n.trim());
-  
-  if (nums.length === 0) {
-    manualStatus.className = "status error";
-    manualStatus.textContent = "❌ Please enter at least one phone number";
-    return;
-  }
+  if (!nums.length || !manualMessage.value.trim()) return;
 
-  if (!manualMessage.value.trim()) {
-    manualStatus.className = "status error";
-    manualStatus.textContent = "❌ Please enter a message";
-    return;
-  }
+  const r = await fetch("/send-manual-numbers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ numbers: nums, message: manualMessage.value })
+  });
 
-  const btn = document.getElementById("sendManualBtn");
-  const statusDiv = document.getElementById("manualStatus");
-  
-  btn.disabled = true;
-  btn.textContent = "Sending...";
-  statusDiv.className = "status loading";
-  statusDiv.textContent = `⏳ Sending SMS to ${nums.length} number(s)...`;
-
-  try {
-    const response = await fetch("/send-manual-numbers", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        numbers: nums,
-        message: manualMessage.value
-      })
-    });
-
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      statusDiv.className = "status success";
-      statusDiv.innerHTML = `✅ <strong>${data.message}</strong><br>
-        <small>Successful: ${data.stats.successful} | Failed: ${data.stats.failed}</small>`;
-      
-      // Show details if there are failures
-      if (data.stats.failed > 0 && data.results) {
-        const failed = data.results.filter(r => !r.success);
-        if (failed.length > 0) {
-          statusDiv.innerHTML += `<br><small style="color:#dc2626;">Failed numbers: ${failed.map(f => f.phone).join(", ")}</small>`;
-        }
-      }
-    } else {
-      statusDiv.className = "status error";
-      statusDiv.innerHTML = `❌ <strong>Failed:</strong> ${data.message || data.error || "Unknown error"}`;
-    }
-  } catch (error) {
-    statusDiv.className = "status error";
-    statusDiv.innerHTML = `❌ <strong>Error:</strong> ${error.message || "Network error. Please try again."}`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Send Manual SMS";
-    fetchLogs();
-  }
+  await r.json();
+  fetchLogs();
 }
 
 async function saveTemplate() {
-  const templateText = document.getElementById("smsTemplate").value.trim();
+  const templateText = smsTemplate.value.trim();
   const status = document.getElementById("templateStatus");
 
   if (!templateText.includes("{membership_id}") || !templateText.includes("{password}")) {
@@ -375,12 +347,12 @@ async function saveTemplate() {
   }
 
   status.className = "status loading";
-  status.textContent = "⏳ Saving template...";
+  status.textContent = "⏳ Updating message template...";
 
   try {
     const res = await fetch("/update-template", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ template: templateText })
     });
 
@@ -388,18 +360,26 @@ async function saveTemplate() {
 
     if (res.ok && data.success) {
       status.className = "status success";
-      status.textContent = "✔️ Template saved successfully.";
+      status.textContent = "✔️ Message template updated successfully.";
+
+      // auto-hide after 3 seconds (optional)
+      setTimeout(() => {
+        status.textContent = "";
+        status.className = "status";
+      }, 3000);
     } else {
       status.className = "status error";
-      status.textContent = "❌ " + (data.message || "Failed to save template");
+      status.textContent = "❌ " + (data.message || "Failed to update template");
     }
   } catch (error) {
     status.className = "status error";
-    status.textContent = "❌ Network error. Try again.";
+    status.textContent = "❌ Network error. Please try again.";
   }
 }
 
+
 fetchLogs();
 </script>
+
 </body>
 </html>

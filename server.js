@@ -49,8 +49,33 @@ if (require("fs").existsSync(excelPath)) {
   const workbook = XLSX.readFile(excelPath);
   const sheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[sheetName];
-  members = XLSX.utils.sheet_to_json(worksheet);
+  members = XLSX.utils.sheet_to_json(worksheet, { raw: true });
+
 }
+
+function excelDateToJSDate(serial) {
+  const utc_days = Math.floor(serial - 25569);
+  const utc_value = utc_days * 86400;
+  const date_info = new Date(utc_value * 1000);
+
+  const day = String(date_info.getUTCDate()).padStart(2, "0");
+  const month = String(date_info.getUTCMonth() + 1).padStart(2, "0");
+  const year = date_info.getUTCFullYear();
+
+  return `${day}-${month}-${year}`;
+}
+
+function excelSerialToDate(serial) {
+  const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+  const date = new Date(excelEpoch.getTime() + serial * 86400000);
+
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const year = date.getUTCFullYear();
+
+  return `${day}/${month}/${year}`;
+}
+
 
 function normalizeMembers(data) {
   return data.map((m) => ({
@@ -59,6 +84,14 @@ function normalizeMembers(data) {
     email: m.email ? String(m.email) : "",
     phoneno_clean: m.phoneno_clean ? String(m.phoneno_clean) : null,
     phoneno: m.phoneno ? String(m.phoneno) : null,
+
+    dob:
+      typeof m.DOB === "number"
+        ? excelSerialToDate(m.DOB)
+        : m.DOB
+        ? String(m.DOB).trim()
+        : null,
+
     password: undefined,
   }));
 }
@@ -181,16 +214,17 @@ async function sendToMemberAndLog(member) {
   try {
     const result = await sendSms(phone, messageText);
     
-    const logEntry = {
-      membership_id: member.membership_id,
-      name: member.name,
-      email: member.email,
-      phone,
-      last4: phone.slice(-4),
-      status: SIMULATION_MODE ? "simulated" : (result.return ? "sent" : "failed"),
-      timestamp: new Date().toISOString(),
-      providerResult: result,
-    };
+   const logEntry = {
+  membership_id: member.membership_id,
+  name: member.name,
+  email: member.email,
+  dob: member.dob || "N/A",
+  phone,
+  last4: phone.slice(-4),
+  status: SIMULATION_MODE ? "simulated" : "sent",
+  timestamp: new Date().toISOString(),
+};
+
 
     sentLogs.unshift(logEntry);
 
