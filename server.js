@@ -94,6 +94,8 @@ members = normalizeMembers(members);
 
 // -------------------- Logs --------------------
 const sentLogs = [];
+const scheduledMessages = [];
+
 
 // -------------------- SMS Simulation --------------------
 function simulateSms(phone, messageText) {
@@ -263,6 +265,72 @@ app.post("/bulk-send", async (req, res) => {
   }
 });
 
+// -------------------- MANUAL SMS --------------------
+app.post("/send-manual-numbers", async (req, res) => {
+  try {
+    const { numbers, message } = req.body;
+
+    if (!numbers || !Array.isArray(numbers) || numbers.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No phone numbers provided"
+      });
+    }
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Message cannot be empty"
+      });
+    }
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const n of numbers) {
+      const phone = String(n).replace(/\D/g, "");
+
+      if (phone.length < 10) {
+        failCount++;
+        continue;
+      }
+
+      await sendSms(phone, message);
+
+      sentLogs.unshift({
+        membership_id: "MANUAL",
+        name: "Manual Entry",
+        email: "",
+        dob: "",
+        phone,
+        last4: phone.slice(-4),
+        status: SIMULATION_MODE ? "simulated" : "sent",
+        timestamp: new Date().toISOString(),
+        type: "Manual SMS"
+      });
+
+      successCount++;
+    }
+
+    res.json({
+      success: true,
+      message: "Manual SMS processed",
+      stats: {
+        successful: successCount,
+        failed: failCount
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Manual SMS failed",
+      error: error.message
+    });
+  }
+});
+
+
 
 // -------------------- Birthday Sender --------------------
 async function sendBirthdayWishes() {
@@ -329,7 +397,7 @@ app.post("/upload-excel", upload.single("file"), (req, res) => {
     const wb = XLSX.read(req.file.buffer, { type: "buffer" });
     const ws = wb.Sheets[wb.SheetNames[0]];
     members = normalizeMembers(XLSX.utils.sheet_to_json(ws));
-    sentLogs.length = 0;
+  
     res.json({ message: "Excel uploaded successfully", totalMembers: members.length });
   } catch {
     res.status(500).json({ message: "Invalid Excel file" });
@@ -339,6 +407,51 @@ app.post("/upload-excel", upload.single("file"), (req, res) => {
 app.get("/sent-logs", (req, res) => {
   res.json(sentLogs.slice(0, 300));
 });
+
+// -------------------- DOWNLOAD REPORT AS EXCEL --------------------
+app.get("/download-report", (req, res) => {
+  try {
+    if (!sentLogs.length) {
+      return res.status(400).json({ message: "No logs available to download" });
+    }
+
+    // Prepare data for Excel
+    const data = sentLogs.map(log => ({
+      "Membership ID": log.membership_id,
+      "Name": log.name,
+      "Email": log.email,
+      "Date of Birth": log.dob,
+      "Phone": log.phone || `******${log.last4}`,
+      "Status": log.status,
+      "Message Type": log.type || "General",
+      "Date & Time": new Date(log.timestamp).toLocaleString()
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
+
+    XLSX.utils.book_append_sheet(wb, ws, "SMS_Report");
+
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=IEI_SMS_Report.xlsx"
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to generate report",
+      error: error.message
+    });
+  }
+});
+
 
 // -------------------- Cron (FINAL / PRODUCTION) --------------------
 cron.schedule("0 9 * * *", () => {

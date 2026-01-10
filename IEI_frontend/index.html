@@ -158,6 +158,10 @@ IEI Administration
 <!-- LOGS -->
 <div class="logs">
   <h2>Sent Messages Report</h2>
+  <button onclick="downloadReport()" style="margin-bottom:12px;">
+  📥 Download Report (Excel)
+</button>
+
   <div id="logs">No messages sent yet.</div>
 </div>
 
@@ -381,6 +385,10 @@ async function saveTemplate() {
     status.className = "status error";
     status.textContent = "❌ Network error. Please try again.";
   }
+}
+
+function downloadReport() {
+  window.location.href = "/download-report";
 }
 
 
