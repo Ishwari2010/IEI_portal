@@ -16,7 +16,7 @@ const SIMULATION_MODE = true;
 
 // ================= MESSAGE TEMPLATE (EDITABLE) =================
 let smsTemplate = `
-Dear Member,
+Dear {name},
 Your IEI Login Credentials are as follows:
 
 Membership ID: {membership_id}
@@ -169,6 +169,101 @@ function isBirthdayToday(dob) {
   );
 }
 
+// -------------------- Send Password + Log --------------------
+async function sendToMemberAndLog(member) {
+  const phone = member.phoneno_clean || member.phoneno;
+  if (!phone) {
+    return { success: false, error: "No phone number available" };
+  }
+
+  if (!member.password) {
+    member.password = generatePassword();
+  }
+
+  const messageText = smsTemplate
+    .replace("{name}", member.name || "Member")
+    .replace("{membership_id}", member.membership_id)
+    .replace("{password}", member.password);
+
+  try {
+    const result = await sendSms(phone, messageText);
+
+    sentLogs.unshift({
+      membership_id: member.membership_id,
+      name: member.name,
+      email: member.email,
+      dob: member.dob,
+      phone,
+      last4: phone.slice(-4),
+      status: SIMULATION_MODE ? "simulated" : "sent",
+      timestamp: new Date().toISOString(),
+      type: "Login Credentials"
+    });
+
+    return {
+      success: true,
+      message: "SMS sent successfully",
+      messageId: result.request_id || null,
+      phone: phone.slice(-4)
+    };
+  } catch (error) {
+    sentLogs.unshift({
+      membership_id: member.membership_id,
+      name: member.name,
+      email: member.email,
+      dob: member.dob,
+      phone,
+      last4: phone.slice(-4),
+      status: "failed",
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+
+    return {
+      success: false,
+      error: error.message,
+      phone: phone.slice(-4)
+    };
+  }
+}
+
+// -------------------- BULK SEND --------------------
+app.post("/bulk-send", async (req, res) => {
+  try {
+    const { batchSize = 5, delayMs = 3000, start = 0, limit } = req.body;
+
+    const end = limit ? start + limit : members.length;
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = start; i < end; i += batchSize) {
+      for (const member of members.slice(i, i + batchSize)) {
+        const result = await sendToMemberAndLog(member);
+        if (result.success) successCount++;
+        else failCount++;
+      }
+      await sleep(delayMs);
+    }
+
+    res.json({
+      success: true,
+      message: "Bulk SMS completed",
+      stats: {
+        total: successCount + failCount,
+        successful: successCount,
+        failed: failCount
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Bulk send failed",
+      error: error.message
+    });
+  }
+});
+
+
 // -------------------- Birthday Sender --------------------
 async function sendBirthdayWishes() {
   console.log("🎂 Running Birthday Wishes Job...");
@@ -195,6 +290,38 @@ async function sendBirthdayWishes() {
     }
   }
 }
+
+// -------------------- UPDATE SMS TEMPLATE --------------------
+app.post("/update-template", (req, res) => {
+  const { template } = req.body;
+
+  if (!template) {
+    return res.status(400).json({
+      success: false,
+      message: "Template cannot be empty"
+    });
+  }
+
+  // Required placeholders
+  const required = ["{membership_id}", "{password}"];
+  const missing = required.filter(p => !template.includes(p));
+
+  if (missing.length > 0) {
+    return res.status(400).json({
+      success: false,
+      message: `Template must include: ${missing.join(", ")}`
+    });
+  }
+
+  // {name} is optional and supported
+  smsTemplate = template;
+
+  res.json({
+    success: true,
+    message: "Message template updated successfully"
+  });
+});
+
 
 // -------------------- Existing APIs (UNCHANGED) --------------------
 app.post("/upload-excel", upload.single("file"), (req, res) => {

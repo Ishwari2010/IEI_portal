@@ -122,10 +122,10 @@ th{background:#f9fafb;}
   <div class="divider"></div>
 
 <h2 style="font-size:1rem">Bulk SMS Message Template</h2>
-<p>You can edit the message. Use placeholders: {membership_id} and {password}</p>
+<p>You can edit the message. Use placeholders: {name}, {membership_id} and {password}</p>
 
 <textarea id="smsTemplate" rows="5" placeholder="Enter SMS template">
-Dear Member,
+Dear {name},
 Your IEI Login Credentials are as follows:
 
 Membership ID: {membership_id}
@@ -133,8 +133,8 @@ Password: {password}
 
 Regards,
 IEI Administration
-
 </textarea>
+
 
 <button onclick="saveTemplate()">Save Template</button>
 <div id="templateStatus" class="status"></div>
@@ -340,11 +340,17 @@ async function saveTemplate() {
   const templateText = smsTemplate.value.trim();
   const status = document.getElementById("templateStatus");
 
-  if (!templateText.includes("{membership_id}") || !templateText.includes("{password}")) {
-    status.className = "status error";
-    status.textContent = "❌ Template must include {membership_id} and {password}";
-    return;
-  }
+  if (
+  !templateText.includes("{name}") ||
+  !templateText.includes("{membership_id}") ||
+  !templateText.includes("{password}")
+) {
+  status.className = "status error";
+  status.textContent =
+    "❌ Template must include {name}, {membership_id} and {password}";
+  return;
+}
+
 
   status.className = "status loading";
   status.textContent = "⏳ Updating message template...";
