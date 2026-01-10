@@ -345,7 +345,7 @@ cron.schedule("0 9 * * *", () => {
   sendBirthdayWishes();
 });
 
-// 🔴 TEMPORARY TEST (REMOVE AFTER TESTING)
+//  TEMPORARY TEST (REMOVE AFTER TESTING)
 sendBirthdayWishes();
 
 // -------------------- Start --------------------
